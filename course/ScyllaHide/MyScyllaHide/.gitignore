@@ -1,0 +1,56 @@
+# Prerequisites
+*.d
+
+# Compiled Object files
+*.slo
+*.lo
+*.o
+*.obj
+
+# Precompiled Headers
+*.gch
+*.pch
+
+# Compiled Dynamic libraries
+*.so
+*.dylib
+*.dll
+
+# Fortran module files
+*.mod
+*.smod
+
+# Compiled Static libraries
+*.lai
+*.la
+*.a
+*.lib
+
+# Executables
+*.exe
+*.out
+*.app
+
+#过滤数据库文件、sln解决方案文件、配置文件
+*.suo
+*.user
+*.sdf
+*.mdb
+*.ldb
+*.config
+*.pdb
+*.ilk
+*.ipdb
+*.iobj
+*.aps
+*.opensdf
+*.exp
+
+#过滤文件夹Debug,Release,obj
+.vs/
+.bak/
+ipch/
+Debug/
+Debug_cef/
+Release/
+obj/
