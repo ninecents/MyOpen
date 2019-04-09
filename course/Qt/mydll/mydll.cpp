@@ -1,4 +1,5 @@
 #include "mydll.h"
+#include <Windows.h>
 #include <QIcon>
 #include <QPixmap>
 #include <QMediaContent>
@@ -8,11 +9,12 @@
 #include <fstream>
 #include <QDir>
 #include <Windows.h>
-
+#include <QTextStream>
+#include <QDebug>
 
 Mydll g_dll;
 
-Mydll::Mydll()
+void test_export_resource()
 {
     // 测试一个icon
     {
@@ -65,4 +67,21 @@ Mydll::Mydll()
     return;*/
 
 //    QMediaContent content("qrc:/media/audio/1.mp3");
+}
+
+void MyLog(QtMsgType type, const QMessageLogContext &context, const QString &msg)
+{
+    OutputDebugStringA(msg.toStdString().data());
+}
+
+void test_qdebug()
+{
+    qInstallMessageHandler(MyLog);
+}
+
+Mydll::Mydll()
+{
+    test_qdebug();
+    return;
+    test_export_resource();
 }
