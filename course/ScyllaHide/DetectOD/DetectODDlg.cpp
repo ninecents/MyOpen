@@ -10,6 +10,24 @@
 // #include "Winable.h"
 #include <winnt.h>
 #include "eh.h"
+
+//////////////////////////////////////////////////////////////////////////
+#include <BlackBone/Config.h>
+#include <BlackBone/Process/Process.h>
+#include <BlackBone/Process/MultPtr.hpp>
+#include <BlackBone/Process/RPC/RemoteFunction.hpp>
+#include <BlackBone/PE/PEImage.h>
+#include <BlackBone/Misc/Utils.h>
+#include <BlackBone/Misc/DynImport.h>
+#include <BlackBone/Syscalls/Syscall.h>
+#include <BlackBone/Patterns/PatternSearch.h>
+#include <BlackBone/Asm/LDasm.h>
+#include <BlackBone/localHook/VTableHook.hpp>
+
+#pragma comment(lib, "D:\\_ALL\\CODE\\github\\DarthTon\\Blackbone\\build\\Win32\\Debug\\BlackBone.lib")
+//////////////////////////////////////////////////////////////////////////
+
+
 #ifdef _DEBUG
 #define new DEBUG_NEW
 #undef THIS_FILE
@@ -369,48 +387,48 @@ void CDetectODDlg::OnGetStartupInfo()
 
 //**********************************************
 // typedef ULONG NTSTATUS;
-typedef ULONG PPEB;
-typedef ULONG KAFFINITY;
-typedef ULONG KPRIORITY;
+// typedef ULONG PPEB;
+// typedef ULONG KAFFINITY;
+// typedef ULONG KPRIORITY;
 
-typedef struct _PROCESS_BASIC_INFORMATION { // Information Class 0
-NTSTATUS ExitStatus;
-PPEB PebBaseAddress;
-KAFFINITY AffinityMask;
-KPRIORITY BasePriority;
-ULONG UniqueProcessId;
-ULONG InheritedFromUniqueProcessId;
-} PROCESS_BASIC_INFORMATION, *PPROCESS_BASIC_INFORMATION;
+// typedef struct _PROCESS_BASIC_INFORMATION { // Information Class 0
+// NTSTATUS ExitStatus;
+// PPEB PebBaseAddress;
+// KAFFINITY AffinityMask;
+// KPRIORITY BasePriority;
+// ULONG UniqueProcessId;
+// ULONG InheritedFromUniqueProcessId;
+// } PROCESS_BASIC_INFORMATION, *PPROCESS_BASIC_INFORMATION;
 
-typedef enum _PROCESSINFOCLASS {
-ProcessBasicInformation, // 0 Y N
-ProcessQuotaLimits, // 1 Y Y
-ProcessIoCounters, // 2 Y N
-ProcessVmCounters, // 3 Y N
-ProcessTimes, // 4 Y N
-ProcessBasePriority, // 5 N Y
-ProcessRaisePriority, // 6 N Y
-ProcessDebugPort, // 7 Y Y
-ProcessExceptionPort, // 8 N Y
-ProcessAccessToken, // 9 N Y
-ProcessLdtInformation, // 10 Y Y
-ProcessLdtSize, // 11 N Y
-ProcessDefaultHardErrorMode, // 12 Y Y
-ProcessIoPortHandlers, // 13 N Y
-ProcessPooledUsageAndLimits, // 14 Y N
-ProcessWorkingSetWatch, // 15 Y Y
-ProcessUserModeIOPL, // 16 N Y
-ProcessEnableAlignmentFaultFixup, // 17 N Y
-ProcessPriorityClass, // 18 N Y
-ProcessWx86Information, // 19 Y N
-ProcessHandleCount, // 20 Y N
-ProcessAffinityMask, // 21 N Y
-ProcessPriorityBoost, // 22 Y Y
-ProcessDeviceMap,// 23 Y Y
-ProcessSessionInformation, // 24 Y Y
-ProcessForegroundInformation, // 25 N Y
-ProcessWow64Information // 26 Y N
-} PROCESSINFOCLASS;
+// typedef enum _PROCESSINFOCLASS {
+// ProcessBasicInformation, // 0 Y N
+// ProcessQuotaLimits, // 1 Y Y
+// ProcessIoCounters, // 2 Y N
+// ProcessVmCounters, // 3 Y N
+// ProcessTimes, // 4 Y N
+// ProcessBasePriority, // 5 N Y
+// ProcessRaisePriority, // 6 N Y
+// ProcessDebugPort, // 7 Y Y
+// ProcessExceptionPort, // 8 N Y
+// ProcessAccessToken, // 9 N Y
+// ProcessLdtInformation, // 10 Y Y
+// ProcessLdtSize, // 11 N Y
+// ProcessDefaultHardErrorMode, // 12 Y Y
+// ProcessIoPortHandlers, // 13 N Y
+// ProcessPooledUsageAndLimits, // 14 Y N
+// ProcessWorkingSetWatch, // 15 Y Y
+// ProcessUserModeIOPL, // 16 N Y
+// ProcessEnableAlignmentFaultFixup, // 17 N Y
+// ProcessPriorityClass, // 18 N Y
+// ProcessWx86Information, // 19 Y N
+// ProcessHandleCount, // 20 Y N
+// ProcessAffinityMask, // 21 N Y
+// ProcessPriorityBoost, // 22 Y Y
+// ProcessDeviceMap,// 23 Y Y
+// ProcessSessionInformation, // 24 Y Y
+// ProcessForegroundInformation, // 25 N Y
+// ProcessWow64Information // 26 Y N
+// } PROCESSINFOCLASS;
 
 
 typedef NTSTATUS (_stdcall *ZwQueryInformationProcess)(
@@ -421,9 +439,38 @@ ULONG ProcessInformationLength,
 PULONG ReturnLength
 ); //定义函数指针
 
+using namespace blackbone;
+void MyOnPebflags()
+{
+	Process _proc;
+	PEB_T peb = { };
+	_PEB32 peb32 = { };
+	_PEB64 peb64 = { };
+
+	_proc.Attach(GetCurrentProcessId());
+	auto ppeb = _proc.core().peb<>(&peb);
+	auto ppeb32 = _proc.core().peb32(&peb32);
+	auto ppeb64 = _proc.core().peb64(&peb64);
+
+	int size = sizeof(PEB_T);
+	size = sizeof(_PEB32);
+	size = sizeof(_PEB64);
+
+	if (peb32.BeingDebugged)
+	{
+		MessageBoxA(NULL, "peb32.BeingDebugged", "MyOnPebflags", MB_OK);
+	}
+	if (peb64.BeingDebugged)
+	{
+		MessageBoxA(NULL, "peb64.BeingDebugged", "MyOnPebflags", MB_OK);
+	}
+}
+
 void CDetectODDlg::OnPebflags() 
 {
 	// TODO: Add your control notification handler code here
+	MyOnPebflags();
+	return;
 	
 	//定义函数指针变量
 	ZwQueryInformationProcess MyZwQueryInformationProcess;
@@ -626,33 +673,33 @@ void CDetectODDlg::OnSeDebugPrivilege()
 #define STATUS_INFO_LENGTH_MISMATCH	((UINT32)0xC0000004L)
 #endif
 
-typedef enum _POOL_TYPE {
-  NonPagedPool,
-  PagedPool,
-  NonPagedPoolMustSucceed,
-  DontUseThisType,
-  NonPagedPoolCacheAligned,
-  PagedPoolCacheAligned,
-  NonPagedPoolCacheAlignedMustS
-} POOL_TYPE;
+// typedef enum _POOL_TYPE {
+//   NonPagedPool,
+//   PagedPool,
+//   NonPagedPoolMustSucceed,
+//   DontUseThisType,
+//   NonPagedPoolCacheAligned,
+//   PagedPoolCacheAligned,
+//   NonPagedPoolCacheAlignedMustS
+// } POOL_TYPE;
 
-typedef struct _UNICODE_STRING {
-    USHORT Length;
-    USHORT MaximumLength;
-    PWSTR Buffer;
-} UNICODE_STRING;
-typedef UNICODE_STRING *PUNICODE_STRING;
-typedef const UNICODE_STRING *PCUNICODE_STRING;
+// typedef struct _UNICODE_STRING {
+//     USHORT Length;
+//     USHORT MaximumLength;
+//     PWSTR Buffer;
+// } UNICODE_STRING;
+// typedef UNICODE_STRING *PUNICODE_STRING;
+// typedef const UNICODE_STRING *PCUNICODE_STRING;
 
-typedef enum _OBJECT_INFORMATION_CLASS
-{
-	ObjectBasicInformation,			// Result is OBJECT_BASIC_INFORMATION structure
-	ObjectNameInformation,			// Result is OBJECT_NAME_INFORMATION structure
-	ObjectTypeInformation,			// Result is OBJECT_TYPE_INFORMATION structure
-	ObjectAllTypesInformation,			// Result is OBJECT_ALL_INFORMATION structure
-	ObjectDataInformation			// Result is OBJECT_DATA_INFORMATION structure
-	
-} OBJECT_INFORMATION_CLASS, *POBJECT_INFORMATION_CLASS;
+// typedef enum _OBJECT_INFORMATION_CLASS
+// {
+// 	ObjectBasicInformation,			// Result is OBJECT_BASIC_INFORMATION structure
+// 	ObjectNameInformation,			// Result is OBJECT_NAME_INFORMATION structure
+// 	ObjectTypeInformation,			// Result is OBJECT_TYPE_INFORMATION structure
+// 	ObjectAllTypesInformation,			// Result is OBJECT_ALL_INFORMATION structure
+// 	ObjectDataInformation			// Result is OBJECT_DATA_INFORMATION structure
+// 	
+// } OBJECT_INFORMATION_CLASS, *POBJECT_INFORMATION_CLASS;
 
 typedef struct _OBJECT_TYPE_INFORMATION {
 	UNICODE_STRING TypeName; 
@@ -701,16 +748,16 @@ void CDetectODDlg::OnNTQueryObject()
 	OBJECT_ALL_TYPES_INFORMATION *Types;
 	OBJECT_TYPE_INFORMATION	*t;
 	ZwQueryObject_t ZwQueryObject;
-
+	DWORD ObjectAllTypesInformation = 3;
 	hNtDLL = GetModuleHandle("ntdll.dll");
 	if(hNtDLL){
 		ZwQueryObject = (ZwQueryObject_t)GetProcAddress(hNtDLL, "ZwQueryObject");
-		UINT32 iResult = ZwQueryObject(NULL, ObjectAllTypesInformation, NULL, NULL, &dwSize);
+		UINT32 iResult = ZwQueryObject(NULL, (OBJECT_INFORMATION_CLASS)ObjectAllTypesInformation, NULL, NULL, &dwSize);
 		if(iResult==STATUS_INFO_LENGTH_MISMATCH)
 		{
 			Types = (OBJECT_ALL_TYPES_INFORMATION*)VirtualAlloc(NULL,dwSize,MEM_COMMIT,PAGE_READWRITE);
 			if (Types == NULL) 	return;
-		    if (iResult=ZwQueryObject(NULL,ObjectAllTypesInformation, Types, dwSize, &dwSize)) return;	
+		    if (iResult=ZwQueryObject(NULL, (OBJECT_INFORMATION_CLASS)ObjectAllTypesInformation, Types, dwSize, &dwSize)) return;
 			for (t=Types->TypeInformation,i=0;i<Types->NumberOfTypes;i++)
 			{   
 				if ( !_wcsicmp(t->TypeName.Buffer,L"DebugObject")) //比较两个是否相等，这个L很特殊，本地的意思
@@ -871,30 +918,31 @@ void CDetectODDlg::OnEnableWindow()
 	wnd->EnableWindow(TRUE);
 }
 /*********************************************************/
-typedef enum _THREADINFOCLASS {
-ThreadBasicInformation, // 0 Y N
-ThreadTimes, // 1 Y N
-ThreadPriority, // 2 N Y
-ThreadBasePriority, // 3 N Y
-ThreadAffinityMask, // 4 N Y
-ThreadImpersonationToken, // 5 N Y
-ThreadDescriptorTableEntry, // 6 Y N
-ThreadEnableAlignmentFaultFixup, // 7 N Y
-ThreadEventPair, // 8 N Y
-ThreadQuerySetWin32StartAddress, // 9 Y Y
-ThreadZeroTlsCell, // 10 N Y
-ThreadPerformanceCount, // 11 Y N
-ThreadAmILastThread, // 12 Y N
-ThreadIdealProcessor, // 13 N Y
-ThreadPriorityBoost, // 14 Y Y
-ThreadSetTlsArrayAddress, // 15 N Y
-ThreadIsIoPending, // 16 Y N
-ThreadHideFromDebugger // 17 N Y
-} THREAD_INFO_CLASS;
+// typedef enum _THREADINFOCLASS {
+// ThreadBasicInformation, // 0 Y N
+// ThreadTimes, // 1 Y N
+// ThreadPriority, // 2 N Y
+// ThreadBasePriority, // 3 N Y
+// ThreadAffinityMask, // 4 N Y
+// ThreadImpersonationToken, // 5 N Y
+// ThreadDescriptorTableEntry, // 6 Y N
+// ThreadEnableAlignmentFaultFixup, // 7 N Y
+// ThreadEventPair, // 8 N Y
+// ThreadQuerySetWin32StartAddress, // 9 Y Y
+// ThreadZeroTlsCell, // 10 N Y
+// ThreadPerformanceCount, // 11 Y N
+// ThreadAmILastThread, // 12 Y N
+// ThreadIdealProcessor, // 13 N Y
+// ThreadPriorityBoost, // 14 Y Y
+// ThreadSetTlsArrayAddress, // 15 N Y
+// ThreadIsIoPending, // 16 Y N
+// ThreadHideFromDebugger // 17 N Y
+// } THREAD_INFO_CLASS;
 
 typedef NTSTATUS (NTAPI *ZwSetInformationThread)(
 IN  HANDLE 						ThreadHandle,
-IN  THREAD_INFO_CLASS			ThreadInformaitonClass,
+// IN  THREAD_INFO_CLASS			ThreadInformaitonClass,
+IN  DWORD						ThreadInformaitonClass,
 IN  PVOID 						ThreadInformation,
 IN  ULONG 						ThreadInformationLength
 );
@@ -905,6 +953,8 @@ void CDetectODDlg::OnZwSetInformationThread()
 	CString str="利用我定位";
 	HANDLE hwnd;
 	HMODULE hModule;
+	DWORD ThreadHideFromDebugger = 17;
+
 	hwnd=GetCurrentThread();
 	hModule=LoadLibrary("ntdll.dll");
 	ZwSetInformationThread myFunc;
@@ -939,7 +989,7 @@ void CDetectODDlg::OnGetEntryPoint()
 /**************************************************************/
 void terminateFunc()
 {
-	AfxMessageBox("set_terminate指定的函数\n");
+	AfxMessageBox("set_terminate指定的函数\\n");
 	exit(0);
 }
 void CDetectODDlg::OnButton1() 
