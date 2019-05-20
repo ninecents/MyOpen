@@ -31,4 +31,11 @@ protected:
 	afx_msg void OnPaint();
 	afx_msg HCURSOR OnQueryDragIcon();
 	DECLARE_MESSAGE_MAP()
+public:
+	CString m_mem_data;
+	DWORD m_mem_length;
+	CEdit m_mem_address;
+	CComboBox m_combo_process;
+	afx_msg void OnBnClickedButtonRead();
+	afx_msg void OnCbnDropdownComboProcess();
 };

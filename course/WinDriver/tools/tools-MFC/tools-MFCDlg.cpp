@@ -11,6 +11,22 @@
 #define new DEBUG_NEW
 #endif
 
+//////////////////////////////////////////////////////////////////////////
+#include <BlackBone/Config.h>
+#include <BlackBone/Process/Process.h>
+#include <BlackBone/Process/MultPtr.hpp>
+#include <BlackBone/Process/RPC/RemoteFunction.hpp>
+#include <BlackBone/PE/PEImage.h>
+#include <BlackBone/Misc/Utils.h>
+#include <BlackBone/Misc/DynImport.h>
+#include <BlackBone/Syscalls/Syscall.h>
+#include <BlackBone/Patterns/PatternSearch.h>
+#include <BlackBone/Asm/LDasm.h>
+#include <BlackBone/localHook/VTableHook.hpp>
+
+// /I"../../../../third/Blackbone/src"
+#pragma comment(lib, "../../../../third/Blackbone/build/Win32/Debug(XP)/BlackBone.lib")
+//////////////////////////////////////////////////////////////////////////
 
 // 用于应用程序“关于”菜单项的 CAboutDlg 对话框
 
@@ -51,6 +67,8 @@ END_MESSAGE_MAP()
 
 CtoolsMFCDlg::CtoolsMFCDlg(CWnd* pParent /*=nullptr*/)
 	: CDialogEx(IDD_TOOLSMFC_DIALOG, pParent)
+	, m_mem_data(_T(""))
+	, m_mem_length(0)
 {
 	m_hIcon = AfxGetApp()->LoadIcon(IDR_MAINFRAME);
 }
@@ -58,12 +76,18 @@ CtoolsMFCDlg::CtoolsMFCDlg(CWnd* pParent /*=nullptr*/)
 void CtoolsMFCDlg::DoDataExchange(CDataExchange* pDX)
 {
 	CDialogEx::DoDataExchange(pDX);
+	DDX_Text(pDX, IDC_EDIT_MEM_DATA, m_mem_data);
+	DDX_Text(pDX, IDC_EDIT_LENGTH, m_mem_length);
+	DDX_Control(pDX, IDC_EDIT_ADDRESS, m_mem_address);
+	DDX_Control(pDX, IDC_COMBO_PROCESS, m_combo_process);
 }
 
 BEGIN_MESSAGE_MAP(CtoolsMFCDlg, CDialogEx)
 	ON_WM_SYSCOMMAND()
 	ON_WM_PAINT()
 	ON_WM_QUERYDRAGICON()
+	ON_BN_CLICKED(IDC_BUTTON_READ, &CtoolsMFCDlg::OnBnClickedButtonRead)
+	ON_CBN_DROPDOWN(IDC_COMBO_PROCESS, &CtoolsMFCDlg::OnCbnDropdownComboProcess)
 END_MESSAGE_MAP()
 
 
@@ -99,6 +123,11 @@ BOOL CtoolsMFCDlg::OnInitDialog()
 	SetIcon(m_hIcon, FALSE);		// 设置小图标
 
 	// TODO: 在此添加额外的初始化代码
+	OnCbnDropdownComboProcess();
+	m_combo_process.SetCurSel(0);
+	m_mem_address.SetWindowText(_T("400000"));
+	m_mem_length = 0x20;
+	UpdateData(FALSE);
 
 	return TRUE;  // 除非将焦点设置到控件，否则返回 TRUE
 }
@@ -152,3 +181,117 @@ HCURSOR CtoolsMFCDlg::OnQueryDragIcon()
 	return static_cast<HCURSOR>(m_hIcon);
 }
 
+std::string ToHex(PBYTE bytes, DWORD length)
+{
+	if (bytes == NULL || length <= 0)
+	{
+		return "";
+	}
+
+	std::string result;
+	for (DWORD i = 0; i < length; ++i)
+	{
+		char hex_byte[4] = { 0 };
+		sprintf_s(hex_byte, 4, "%02X ", bytes[i]);
+		result += hex_byte;
+	}
+
+	return result;
+}
+
+
+std::string ToHexLines(PBYTE bytes, DWORD length)
+{
+	if (bytes == NULL || length <= 0)
+	{
+		return "";
+	}
+	
+	DWORD line = length / 0x10;
+	DWORD left = length % 0x10;
+
+	std::string result;
+	for (DWORD i = 0; i < line; ++i)
+	{
+		result += ToHex(bytes + 0x10 * i, 0x10);
+		result += "\r\n";
+	}
+
+	result += ToHex(bytes + 0x10 * line, left);
+
+	return result;
+}
+
+void CtoolsMFCDlg::OnBnClickedButtonRead()
+{
+	// TODO: 在此添加控件通知处理程序代码
+	UpdateData();
+
+	CString str_address;
+	m_mem_address.GetWindowText(str_address);
+	str_address = _T("0x") + str_address;
+	LONGLONG dw_address = _tcstoull_l(str_address.GetBuffer(), NULL, 16, 0);
+
+	int nIndex = m_combo_process.GetCurSel();
+	DWORD pid = m_combo_process.GetItemData(nIndex);
+
+	blackbone::Process process;
+	process.Attach(pid);
+	if (!process.valid())
+	{
+		AfxMessageBox(_T("打开进程失败。"));
+		return;
+	}
+
+	PBYTE bytes = new BYTE[m_mem_length];
+	if (NULL == bytes)
+	{
+		return;
+	}
+	NTSTATUS status = process.memory().Read(dw_address, m_mem_length, (PVOID)bytes);
+	if (!NT_SUCCESS(status))
+	{
+		AfxMessageBox(_T("读取进程内存失败，请检查内存地址和大小。"));
+		return;
+	}
+// 	m_mem_data.Format(_T("%02X %02X %02X %02X   %02X %02X %02X %02X "), bytes[0], bytes[1], bytes[2], bytes[3]
+// 		, bytes[4], bytes[5], bytes[6], bytes[7]);
+	std::string str_mem_data = ToHexLines(bytes, m_mem_length);
+	m_mem_data = CStringA(str_mem_data.data());
+	UpdateData(FALSE);
+}
+
+
+void CtoolsMFCDlg::OnCbnDropdownComboProcess()
+{
+	// TODO: 在此添加控件通知处理程序代码
+	m_combo_process.ResetContent();
+	blackbone::Process process;
+
+	std::vector<DWORD> vct_pids = blackbone::Process::EnumByName(L"");
+	for (auto pid : vct_pids)
+	{
+		NTSTATUS status = process.Attach(pid);
+		CString msg;
+
+		if (NT_SUCCESS(status))
+		{
+			if (process.modules().GetMainModule())
+			{
+				CString str_64 = process.core().isWow64() ? _T("x86") : _T("x64");
+				msg.Format(_T("[%05d][%s] %s"), process.pid(), str_64.GetBuffer(), process.modules().GetMainModule()->fullPath.data());
+			}
+			else
+			{
+				msg.Format(_T("[%d] %s"), process.pid(), _T("failed_get_path"));
+			}
+		}
+		else
+		{
+			msg.Format(_T("[%d] %s"), pid, _T("failed_Attach"));
+		}
+		m_combo_process.AddString(msg);
+		int nIndex = m_combo_process.GetCount() - 1;
+		m_combo_process.SetItemData(nIndex, pid);
+	}
+}
