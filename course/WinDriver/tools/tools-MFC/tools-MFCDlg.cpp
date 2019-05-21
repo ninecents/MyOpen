@@ -23,9 +23,14 @@
 #include <BlackBone/Patterns/PatternSearch.h>
 #include <BlackBone/Asm/LDasm.h>
 #include <BlackBone/localHook/VTableHook.hpp>
+#include <BlackBone/DriverControl/DriverControl.h>
 
 // /I"../../../../third/Blackbone/src"
+#ifdef _DEBUG
 #pragma comment(lib, "../../../../third/Blackbone/build/Win32/Debug(XP)/BlackBone.lib")
+#else
+#pragma comment(lib, "../../../../third/Blackbone/build/Win32/Release(XP)/BlackBone.lib")
+#endif
 //////////////////////////////////////////////////////////////////////////
 
 // 用于应用程序“关于”菜单项的 CAboutDlg 对话框
@@ -226,11 +231,12 @@ void CtoolsMFCDlg::OnBnClickedButtonRead()
 {
 	// TODO: 在此添加控件通知处理程序代码
 	UpdateData();
+	m_mem_data.SetString(_T(""));
 
 	CString str_address;
 	m_mem_address.GetWindowText(str_address);
 	str_address = _T("0x") + str_address;
-	LONGLONG dw_address = _tcstoull_l(str_address.GetBuffer(), NULL, 16, 0);
+	LONGLONG ll_address = _tcstoull_l(str_address.GetBuffer(), NULL, 16, 0);
 
 	int nIndex = m_combo_process.GetCurSel();
 	DWORD pid = m_combo_process.GetItemData(nIndex);
@@ -248,16 +254,54 @@ void CtoolsMFCDlg::OnBnClickedButtonRead()
 	{
 		return;
 	}
-	NTSTATUS status = process.memory().Read(dw_address, m_mem_length, (PVOID)bytes);
-	if (!NT_SUCCESS(status))
+
+	// ReadProcessMemory方式
+	if (false)
 	{
-		AfxMessageBox(_T("读取进程内存失败，请检查内存地址和大小。"));
-		return;
+		SIZE_T byte_read;
+		BOOL result = ReadProcessMemory(process.core().handle(), (LPCVOID)ll_address, (LPVOID)bytes, (SIZE_T)m_mem_length, &byte_read);
+		if (result == FALSE)
+		{
+			AfxMessageBox(_T("读取进程内存失败，请检查内存地址和大小。"));
+			return;
+		}
+	}
+	// blackbone方式
+	else if (false)
+	{
+		NTSTATUS status = process.memory().Read(ll_address, m_mem_length, (PVOID)bytes);
+		if (!NT_SUCCESS(status))
+		{
+			AfxMessageBox(_T("读取进程内存失败，请检查内存地址和大小。"));
+			return;
+		}
+	}
+	// 驱动方式
+	else
+	{
+		NTSTATUS status = blackbone::Driver().EnsureLoaded();
+		if (!NT_SUCCESS(status))
+		{
+			AfxMessageBox(_T("加载驱动失败。"));
+			return;
+		}
+		status = blackbone::Driver().ReadMem(pid, ll_address, m_mem_length, (PVOID)bytes);
+		if (!NT_SUCCESS(status))
+		{
+			AfxMessageBox(_T("读取进程内存失败，请检查内存地址和大小。"));
+			return;
+		}
 	}
 // 	m_mem_data.Format(_T("%02X %02X %02X %02X   %02X %02X %02X %02X "), bytes[0], bytes[1], bytes[2], bytes[3]
 // 		, bytes[4], bytes[5], bytes[6], bytes[7]);
 	std::string str_mem_data = ToHexLines(bytes, m_mem_length);
 	m_mem_data = CStringA(str_mem_data.data());
+
+	if (bytes)
+	{
+		delete(bytes);
+		bytes = NULL;
+	}
 	UpdateData(FALSE);
 }
 
