@@ -38,4 +38,6 @@ public:
 	CComboBox m_combo_process;
 	afx_msg void OnBnClickedButtonRead();
 	afx_msg void OnCbnDropdownComboProcess();
+	afx_msg void OnCbnSelchangeComboProcess();
+	CComboBox m_combo_read_type;
 };

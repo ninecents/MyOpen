@@ -16,8 +16,12 @@
 #define CALL_64_86(b, f, ...) (b ? f<uint64_t>(__VA_ARGS__) : f<uint32_t>(__VA_ARGS__))
 #define FIELD_PTR_64_86(b, e, t, f) (b ? fieldPtr( e, &t<uint64_t>::f ) : fieldPtr( e, &t<uint32_t>::f ))
 
+#ifndef LODWORD
 #define LODWORD(l) ((uint32_t)(((uint64_t)(l)) & 0xffffffff))
+#endif
+#ifndef HIDWORD
 #define HIDWORD(l) ((uint32_t)((((uint64_t)(l)) >> 32) & 0xffffffff))
+#endif
 
 // Set or reset particular bit
 #define SET_BIT(v, b)   v |= (1ull << b)

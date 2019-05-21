@@ -85,6 +85,7 @@ void CtoolsMFCDlg::DoDataExchange(CDataExchange* pDX)
 	DDX_Text(pDX, IDC_EDIT_LENGTH, m_mem_length);
 	DDX_Control(pDX, IDC_EDIT_ADDRESS, m_mem_address);
 	DDX_Control(pDX, IDC_COMBO_PROCESS, m_combo_process);
+	DDX_Control(pDX, IDC_COMBO_READ_TYPE, m_combo_read_type);
 }
 
 BEGIN_MESSAGE_MAP(CtoolsMFCDlg, CDialogEx)
@@ -93,6 +94,7 @@ BEGIN_MESSAGE_MAP(CtoolsMFCDlg, CDialogEx)
 	ON_WM_QUERYDRAGICON()
 	ON_BN_CLICKED(IDC_BUTTON_READ, &CtoolsMFCDlg::OnBnClickedButtonRead)
 	ON_CBN_DROPDOWN(IDC_COMBO_PROCESS, &CtoolsMFCDlg::OnCbnDropdownComboProcess)
+	ON_CBN_SELCHANGE(IDC_COMBO_PROCESS, &CtoolsMFCDlg::OnCbnSelchangeComboProcess)
 END_MESSAGE_MAP()
 
 
@@ -133,6 +135,11 @@ BOOL CtoolsMFCDlg::OnInitDialog()
 	m_mem_address.SetWindowText(_T("400000"));
 	m_mem_length = 0x20;
 	UpdateData(FALSE);
+
+	m_combo_read_type.AddString(_T("ReadProcessMemory"));
+	m_combo_read_type.AddString(_T("BlackBone_R3"));
+	m_combo_read_type.AddString(_T("BlackBone_R0"));
+	m_combo_read_type.SetCurSel(0);
 
 	return TRUE;  // 除非将焦点设置到控件，否则返回 TRUE
 }
@@ -229,18 +236,25 @@ std::string ToHexLines(PBYTE bytes, DWORD length)
 
 void CtoolsMFCDlg::OnBnClickedButtonRead()
 {
-	// TODO: 在此添加控件通知处理程序代码
+	// 更新控件数据，清空16进制显示控件内容
 	UpdateData();
 	m_mem_data.SetString(_T(""));
 
+	// 获取目标进程内存地址：ll_address
 	CString str_address;
 	m_mem_address.GetWindowText(str_address);
 	str_address = _T("0x") + str_address;
 	LONGLONG ll_address = _tcstoull_l(str_address.GetBuffer(), NULL, 16, 0);
 
+	// 获取目标进程ID：pid
 	int nIndex = m_combo_process.GetCurSel();
 	DWORD pid = m_combo_process.GetItemData(nIndex);
 
+	// 获取读取方式：str_read_type
+	CString str_read_type;
+	m_combo_read_type.GetWindowText(str_read_type);
+
+	// 打开目标进程
 	blackbone::Process process;
 	process.Attach(pid);
 	if (!process.valid())
@@ -256,7 +270,7 @@ void CtoolsMFCDlg::OnBnClickedButtonRead()
 	}
 
 	// ReadProcessMemory方式
-	if (false)
+	if (str_read_type == _T("ReadProcessMemory"))
 	{
 		SIZE_T byte_read;
 		BOOL result = ReadProcessMemory(process.core().handle(), (LPCVOID)ll_address, (LPVOID)bytes, (SIZE_T)m_mem_length, &byte_read);
@@ -266,8 +280,8 @@ void CtoolsMFCDlg::OnBnClickedButtonRead()
 			return;
 		}
 	}
-	// blackbone方式
-	else if (false)
+	// blackbone方式: NtWow64ReadVirtualMemory64
+	else if (str_read_type == _T("BlackBone_R3"))
 	{
 		NTSTATUS status = process.memory().Read(ll_address, m_mem_length, (PVOID)bytes);
 		if (!NT_SUCCESS(status))
@@ -277,14 +291,16 @@ void CtoolsMFCDlg::OnBnClickedButtonRead()
 		}
 	}
 	// 驱动方式
-	else
+	else if (str_read_type == _T("BlackBone_R0"))
 	{
+		// 加载驱动
 		NTSTATUS status = blackbone::Driver().EnsureLoaded();
 		if (!NT_SUCCESS(status))
 		{
 			AfxMessageBox(_T("加载驱动失败。"));
 			return;
 		}
+		// 驱动内存读取
 		status = blackbone::Driver().ReadMem(pid, ll_address, m_mem_length, (PVOID)bytes);
 		if (!NT_SUCCESS(status))
 		{
@@ -338,4 +354,28 @@ void CtoolsMFCDlg::OnCbnDropdownComboProcess()
 		int nIndex = m_combo_process.GetCount() - 1;
 		m_combo_process.SetItemData(nIndex, pid);
 	}
+}
+
+
+void CtoolsMFCDlg::OnCbnSelchangeComboProcess()
+{
+	// TODO: 在此添加控件通知处理程序代码
+	int nIndex = m_combo_process.GetCurSel();
+	DWORD pid = m_combo_process.GetItemData(nIndex);
+
+	blackbone::Process process;
+	process.Attach(pid);
+	if (!process.valid())
+	{
+		return;
+	}
+
+	if (process.modules().GetMainModule() == nullptr)
+	{
+		return;
+	}
+
+	CString str_address;
+	str_address.Format(_T("%llX"), process.modules().GetMainModule()->baseAddress);
+	m_mem_address.SetWindowText(str_address);
 }
